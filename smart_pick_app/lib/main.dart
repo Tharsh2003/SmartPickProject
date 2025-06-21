@@ -501,10 +501,10 @@ class AboutScreen extends StatelessWidget {
               color: Color(0xFF845EC2),
             ),
             //const FeatureTile(
-             // icon: Icons.security,
-              //title: 'Secure Storage',
-             // description: 'Tamper-proof lockers for your parcels',
-             // color: Color(0xFF6C56F5),
+            // icon: Icons.security,
+            //title: 'Secure Storage',
+            // description: 'Tamper-proof lockers for your parcels',
+            // color: Color(0xFF6C56F5),
             //),
 
             const SizedBox(height: 32),
