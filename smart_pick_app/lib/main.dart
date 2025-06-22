@@ -6,6 +6,132 @@ void main() {
   runApp(const SmartPickApp());
 }
 
+class AdminDashboardScreen extends StatefulWidget {
+  const AdminDashboardScreen({super.key});
+
+  @override
+  State<AdminDashboardScreen> createState() => _AdminDashboardScreenState();
+}
+
+class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
+  List<Map<String, dynamic>> parcels = [
+    {
+      'id': 'P001',
+      'locker': 'Row D - Locker 47',
+      'status': 'Ready for Pickup',
+      'pin': '689950'
+    },
+    {
+      'id': 'P002',
+      'locker': 'Row B - Locker 10',
+      'status': 'Collected',
+      'pin': '123456'
+    },
+  ];
+
+  void _markCollected(int index) {
+    setState(() {
+      parcels[index]['status'] = 'Collected';
+    });
+  }
+
+  void _showAddParcelDialog() {
+    String id = '';
+    String locker = '';
+    String pin = '';
+
+    showDialog(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Add New Parcel'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              onChanged: (val) => id = val,
+              decoration: const InputDecoration(labelText: 'Parcel ID'),
+            ),
+            TextField(
+              onChanged: (val) => locker = val,
+              decoration: const InputDecoration(labelText: 'Locker Location'),
+            ),
+            TextField(
+              onChanged: (val) => pin = val,
+              decoration: const InputDecoration(labelText: 'Pickup PIN'),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              if (id.isNotEmpty && locker.isNotEmpty && pin.isNotEmpty) {
+                setState(() {
+                  parcels.add({
+                    'id': id,
+                    'locker': locker,
+                    'pin': pin,
+                    'status': 'Ready for Pickup',
+                  });
+                });
+                Navigator.pop(context);
+              }
+            },
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin Dashboard')),
+      body: ListView.builder(
+        itemCount: parcels.length,
+        padding: const EdgeInsets.all(16),
+        itemBuilder: (context, index) {
+          final parcel = parcels[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              leading: const Icon(Icons.inventory),
+              title: Text('Parcel ID: ${parcel['id']}'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Locker: ${parcel['locker']}'),
+                  Text('PIN: ${parcel['pin']}'),
+                  Text('Status: ${parcel['status']}'),
+                ],
+              ),
+              trailing: parcel['status'] == 'Ready for Pickup'
+                  ? IconButton(
+                icon: const Icon(Icons.check_circle, color: Colors.green),
+                onPressed: () => _markCollected(index),
+              )
+                  : const Icon(Icons.done, color: Colors.grey),
+            ),
+          );
+        },
+      ),
+        floatingActionButton: FloatingActionButton(
+          onPressed: _showAddParcelDialog,
+          child: const Icon(Icons.add),
+          tooltip: 'Add Parcel',
+        ),
+
+
+    );
+  }
+}
+
 class SmartPickApp extends StatelessWidget {
   const SmartPickApp({super.key});
 
@@ -38,6 +164,9 @@ class SmartPickApp extends StatelessWidget {
         '/about': (context) => const AboutScreen(),
         '/face': (context) => const FacialRecognitionScreen(),
         '/notifications': (context) => const NotificationScreen(),
+        '/admin_login': (context) => const AdminLoginScreen(),
+        '/admin_dashboard': (context) => const AdminDashboardScreen(),
+
       },
     );
   }
@@ -109,6 +238,15 @@ class HomeScreen extends StatelessWidget {
                     color: const Color(0xFF845EC2),
                     onTap: () => Navigator.pushNamed(context, '/about'),
                   ),
+
+                  _HomeCardButton(
+                    icon: Icons.admin_panel_settings,
+                    title: 'Admin Login',
+                    description: 'Manage parcels and locker status',
+                    color: Colors.deepPurple,
+                    onTap: () => Navigator.pushNamed(context, '/admin_login'),
+                  ),
+
                 ],
               ),
             ),
@@ -353,6 +491,62 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
                   foregroundColor: Colors.white,
                 ),
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class AdminLoginScreen extends StatefulWidget {
+  const AdminLoginScreen({super.key});
+
+  @override
+  State<AdminLoginScreen> createState() => _AdminLoginScreenState();
+}
+
+class _AdminLoginScreenState extends State<AdminLoginScreen> {
+  final _usernameController = TextEditingController();
+  final _passwordController = TextEditingController();
+  String? _errorText;
+
+  void _login() {
+    if (_usernameController.text == 'admin' &&
+        _passwordController.text == 'admin123') {
+      Navigator.pushReplacementNamed(context, '/admin_dashboard');
+    } else {
+      setState(() => _errorText = 'Invalid username or password');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin Login')),
+      body: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            TextField(
+              controller: _usernameController,
+              decoration: const InputDecoration(labelText: 'Username'),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(labelText: 'Password'),
+              obscureText: true,
+            ),
+            if (_errorText != null) ...[
+              const SizedBox(height: 8),
+              Text(_errorText!, style: const TextStyle(color: Colors.red)),
+            ],
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _login,
+              child: const Text('Login'),
             ),
           ],
         ),
