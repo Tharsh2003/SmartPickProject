@@ -1,6 +1,8 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 void main() {
   runApp(const SmartPickApp());
@@ -276,13 +278,49 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
     _generatePin();
   }
 
-  void _generatePin() {
+  void _generatePin() async {
     final random = Random();
+    final newPin = (100000 + random.nextInt(900000)).toString();
+
     setState(() {
-      _pin = (100000 + random.nextInt(900000)).toString();
+      _pin = newPin;
       _isPinVisible = false;
     });
+
+    await _sendPinToPi(newPin);
   }
+
+  Future<void> _sendPinToPi(String pin) async {
+    const String raspberryPiIP = 'http://192.168.1.14:5000'; // <-- Replace with your actual Pi IP
+
+    final url = Uri.parse('$raspberryPiIP/set-pin');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'pin': pin}),
+      );
+
+      if (response.statusCode == 200) {
+        print('PIN sent successfully: $pin');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN sent to Smart Locker')),
+        );
+      } else {
+        print('Failed to send PIN. Status: ${response.statusCode}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to send PIN to Pi')),
+        );
+      }
+    } catch (e) {
+      print('Error sending PIN: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
+
 
   void _togglePinVisibility() {
     setState(() {
