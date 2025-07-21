@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "678283794658",
+    "firebase_url": "https://smartpicklocker-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "project_id": "smartpicklocker",
+    "storage_bucket": "smartpicklocker.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:678283794658:android:1f34241c8c6cf194af26bb",
+        "android_client_info": {
+          "package_name": "com.example.smart_pick_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC-VjCu7cWzmJd-Yh_9sRwfhot5Ckky_to"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

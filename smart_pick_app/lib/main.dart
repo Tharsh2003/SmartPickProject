@@ -1,9 +1,23 @@
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
+import 'package:firebase_database/firebase_database.dart';
 
-void main() {
+// ...
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();  // Required for async main
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const SmartPickApp());
+
+  FirebaseDatabase database = FirebaseDatabase.instance;
+  FirebaseApp secondaryApp = Firebase.app('SecondaryApp');
+  final firebaseApp = Firebase.app();
+  final rtdb = FirebaseDatabase.instanceFor(app: firebaseApp, databaseURL: 'https://your-realtime-database-url.firebaseio.com/');
 }
 
 class AdminDashboardScreen extends StatefulWidget {
@@ -14,25 +28,50 @@ class AdminDashboardScreen extends StatefulWidget {
 }
 
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
-  List<Map<String, dynamic>> parcels = [
-    {
-      'id': 'P001',
-      'locker': 'Row D - Locker 47',
-      'status': 'Ready for Pickup',
-      'pin': '689950'
-    },
-    {
-      'id': 'P002',
-      'locker': 'Row B - Locker 10',
-      'status': 'Collected',
-      'pin': '123456'
-    },
-  ];
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref().child('Deliveries/');
+  List<Parcel> _parcels = [];
 
-  void _markCollected(int index) {
+  @override
+  void initState() {
+    super.initState();
+    _fetchParcels();
+  }
+  void _fetchParcels() async{
+    final snapshot = await _dbRef.get();
+    final parcels = <Parcel>[];
+
+    if(snapshot.exists) {
+      final data = snapshot.value as Map<dynamic, dynamic>;
+      data.forEach((key, value) {
+        parcels.add(Parcel.fromMap(key, value));
+      });
+    }
+
     setState(() {
-      parcels[index]['status'] = 'Collected';
+      _parcels = parcels;
     });
+  }
+
+  void _markCollected(int index) async {
+    final parcel = _parcels[index];
+    final parcelId = parcel.id;
+
+    await FirebaseDatabase.instance.ref('Deliveries/$parcelId').update({
+      'status': 'Collected',
+    });
+
+    setState(() {
+      _parcels[index] = Parcel(
+        id: parcel.id,
+        locker: parcel.locker,
+        pin: parcel.pin,
+        status: 'Collected',
+      );
+    });
+
+    // setState(() {
+    //   parcels[index]['status'] = 'Collected';
+    // });
   }
 
   void _showAddParcelDialog() {
@@ -68,16 +107,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () {
+            onPressed: () async {
               if (id.isNotEmpty && locker.isNotEmpty && pin.isNotEmpty) {
-                setState(() {
-                  parcels.add({
-                    'id': id,
-                    'locker': locker,
-                    'pin': pin,
-                    'status': 'Ready for Pickup',
-                  });
+                await FirebaseDatabase.instance.ref('Deliveries/$id').set({
+                  'locker': locker,
+                  'pin': int.tryParse(pin) ?? 0,
+                  'status': 'Ready for Pickup',
                 });
+
+                // Optional: Refresh UI by re-fetching data
+                _fetchParcels();
                 Navigator.pop(context);
               }
             },
@@ -88,30 +127,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Admin Dashboard')),
       body: ListView.builder(
-        itemCount: parcels.length,
+        itemCount: _parcels.length,
         padding: const EdgeInsets.all(16),
         itemBuilder: (context, index) {
-          final parcel = parcels[index];
+          final parcel = _parcels[index];
           return Card(
             margin: const EdgeInsets.symmetric(vertical: 8),
             child: ListTile(
               leading: const Icon(Icons.inventory),
-              title: Text('Parcel ID: ${parcel['id']}'),
+              title: Text('Parcel ID: ${parcel.id}'),
               subtitle: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Locker: ${parcel['locker']}'),
-                  Text('PIN: ${parcel['pin']}'),
-                  Text('Status: ${parcel['status']}'),
+                  Text('Locker: ${parcel.locker}'),
+                  Text('PIN: ${parcel.pin}'),
+                  Text('Status: ${parcel.status}'),
                 ],
               ),
-              trailing: parcel['status'] == 'Ready for Pickup'
+              trailing: parcel.status == 'Ready for Pickup'
                   ? IconButton(
                 icon: const Icon(Icons.check_circle, color: Colors.green),
                 onPressed: () => _markCollected(index),
@@ -132,6 +170,25 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 }
 
+class Parcel {
+  final String id;
+  final String locker;
+  final int pin;
+  final String status;
+
+  Parcel({required this.id, required this.locker, required this.pin, required this.status});
+
+  factory Parcel.fromMap(String id, Map<dynamic, dynamic> data) {
+    return Parcel(
+      id: id,
+      locker: data['locker'],
+      pin: data['pin'],
+      status: data['status'],
+
+    );
+  }
+}
+
 class SmartPickApp extends StatelessWidget {
   const SmartPickApp({super.key});
 
@@ -139,6 +196,9 @@ class SmartPickApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'SmartPick App',
+      home: Scaffold(
+        body: HomeScreen(),
+      ),
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF6C56F5)),
         useMaterial3: true,
@@ -159,14 +219,29 @@ class SmartPickApp extends StatelessWidget {
       ),
       initialRoute: '/',
       routes: {
-        '/': (context) => const HomeScreen(),
-        '/parcelinfo': (context) => const ParcelInfoScreen(),
+        '/Homescreen': (context) => const HomeScreen(),
+        // '/parcelinfo': (context) => const ParcelInfoScreen(),
+        '/collectparcel': (context) => const CollectParcelScreen(),
         '/about': (context) => const AboutScreen(),
         '/face': (context) => const FacialRecognitionScreen(),
         '/notifications': (context) => const NotificationScreen(),
         '/admin_login': (context) => const AdminLoginScreen(),
         '/admin_dashboard': (context) => const AdminDashboardScreen(),
+      },
+      onGenerateRoute: (settings) {
+        if (settings.name == '/parcelinfo') {
+          final parcel = settings.arguments as Parcel;
+          return MaterialPageRoute(
+            builder: (context) => ParcelInfoScreen(parcel: parcel),
+          );
+        }
 
+        // Optional fallback:
+        return MaterialPageRoute(
+          builder: (context) => const Scaffold(
+            body: Center(child: Text('Page not found')),
+          ),
+        );
       },
     );
   }
@@ -220,7 +295,7 @@ class HomeScreen extends StatelessWidget {
                     title: 'Pickup Your Parcel',
                     description: 'View locker location and pickup PIN',
                     color: const Color(0xFF6C56F5),
-                    onTap: () => Navigator.pushNamed(context, '/parcelinfo'),
+                    onTap: () => Navigator.pushNamed(context, '/collectparcel'),
                   ),
                   const SizedBox(height: 16),
                   _HomeCardButton(
@@ -258,37 +333,52 @@ class HomeScreen extends StatelessWidget {
 }
 
 class ParcelInfoScreen extends StatefulWidget {
-  const ParcelInfoScreen({super.key});
+  final Parcel parcel;
+
+  const ParcelInfoScreen({Key? key, required this.parcel}) : super(key: key);
 
   @override
   State<ParcelInfoScreen> createState() => _ParcelInfoScreenState();
+  // const ParcelInfoScreen({super.key});
+  // @override
+  // State<ParcelInfoScreen> createState() => _ParcelInfoScreenState();
 }
 
 class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
-  String _pin = '';
-  final String lockerLocation = "Row D - Locker 47";
-  String status = "Ready for Pickup";
+  final _PINController = TextEditingController();
+  // String _pin = '';
+  // final String lockerLocation = "Row D - Locker 47";
+  // String status = "Ready for Pickup";
   bool _isPinVisible = false;
 
   @override
   void initState() {
     super.initState();
-    _generatePin();
   }
 
-  void _generatePin() {
-    final random = Random();
-    setState(() {
-      _pin = (100000 + random.nextInt(900000)).toString();
-      _isPinVisible = false;
-    });
+  void _enterPIN() async {
+    final enteredPIN = _PINController.text.trim();
+    final enteredPin_Int = int.tryParse(enteredPIN);
+    final storedPIN = widget.parcel.pin;
+
+    // final snapshot = await FirebaseDatabase.instance.ref('Admin').get();
+    if (storedPIN == enteredPin_Int) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Correct PIN entered.')),
+      );
+      Navigator.pushReplacementNamed(context, '/admin_dashboard');
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Invalid PIN!')),
+      );
+    }
   }
 
-  void _togglePinVisibility() {
-    setState(() {
-      _isPinVisible = !_isPinVisible;
-    });
-  }
+  // void _togglePinVisibility() {
+  //   setState(() {
+  //     _isPinVisible = !_isPinVisible;
+  //   });
+  // }
 
   @override
   Widget build(BuildContext context) {
@@ -298,7 +388,7 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
       appBar: AppBar(
         title: const Text('Parcel Information'),
       ),
-      drawer: const AppDrawer(),
+      // drawer: const AppDrawer(),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -312,6 +402,46 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
                 padding: const EdgeInsets.all(20),
                 child: Column(
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF6C56F5).withOpacity(0.1),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.account_box_rounded,
+                            color: Color(0xFF6C56F5),
+                            size: 28,
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Parcel ID',
+                                style: theme.textTheme.titleMedium?.copyWith(
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                '${widget.parcel.id}',
+                                style: theme.textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const Divider(height: 1),
+                    const SizedBox(height: 20),
                     Row(
                       children: [
                         Container(
@@ -339,12 +469,9 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                status,
+                                '${widget.parcel.status}',
                                 style: theme.textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.w600,
-                                  color: status == "Collected"
-                                      ? Colors.green
-                                      : const Color(0xFF6C56F5),
                                 ),
                               ),
                             ],
@@ -382,7 +509,8 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
                               ),
                               const SizedBox(height: 4),
                               Text(
-                                lockerLocation,
+                                // lockerLocation,
+                                '${widget.parcel.locker}',
                                 style: theme.textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.w600,
                                 ),
@@ -426,32 +554,13 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Pickup PIN',
-                                style: theme.textTheme.titleMedium?.copyWith(
-                                  color: Colors.grey[600],
-                                ),
+                              TextField(
+                                controller: _PINController,
+                                decoration: const InputDecoration(labelText: 'Enter PIN'),
                               ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _isPinVisible ? _pin : '••••••',
-                                style: theme.textTheme.headlineSmall?.copyWith(
-                                  fontWeight: FontWeight.w600,
-                                  letterSpacing: 4,
-                                  color: const Color(0xFF6C56F5),
-                                ),
-                              ),
+                              const SizedBox(height: 24),
                             ],
                           ),
-                        ),
-                        IconButton(
-                          icon: Icon(
-                            _isPinVisible
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                            color: Colors.grey,
-                          ),
-                          onPressed: _togglePinVisibility,
                         ),
                       ],
                     ),
@@ -466,9 +575,9 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
                             borderRadius: BorderRadius.circular(12),
                           ),
                         ),
-                        icon: const Icon(Icons.refresh, size: 20),
-                        label: const Text('Generate New PIN'),
-                        onPressed: _generatePin,
+                        icon: const Icon(Icons.arrow_forward_rounded, size: 20),
+                        label: const Text('Confirm PIN'),
+                        onPressed: _enterPIN,
                       ),
                     ),
                   ],
@@ -479,7 +588,7 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pushNamed(context, '/Homescreen'),
                 icon: const Icon(Icons.home),
                 label: const Text('Back to Home'),
                 style: ElevatedButton.styleFrom(
@@ -499,6 +608,89 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
   }
 }
 
+class CollectParcelScreen extends StatefulWidget {
+  const CollectParcelScreen({super.key});
+
+  @override
+  State<CollectParcelScreen> createState() => _CollectParcelScreenState();
+}
+
+class _CollectParcelScreenState extends State<CollectParcelScreen> {
+  final DatabaseReference _dbRef = FirebaseDatabase.instance.ref().child('Deliveries/');
+  List<Parcel> _parcels = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchParcels();
+  }
+  void _fetchParcels() async{
+    final snapshot = await _dbRef.get();
+    final parcels = <Parcel>[];
+
+    if(snapshot.exists) {
+      final data = snapshot.value as Map<dynamic, dynamic>;
+      data.forEach((key, value) {
+        final parcel = Parcel.fromMap(key, value);
+        if (parcel.status == 'Ready for Pickup') {
+          parcels.add(parcel);
+        }
+      // final data = snapshot.value as Map<dynamic, dynamic>;
+      // data.forEach((key, value) {
+      //   parcels.add(Parcel.fromMap(key, value));
+      });
+    }
+
+    setState(() {
+      _parcels = parcels;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Choose your parcel')),
+      body: ListView.builder(
+        itemCount: _parcels.length,
+        padding: const EdgeInsets.all(16),
+        itemBuilder: (context, index) {
+          final parcel = _parcels[index];
+          return Card(
+            margin: const EdgeInsets.symmetric(vertical: 8),
+            child: ListTile(
+              leading: const Icon(Icons.inventory),
+              title: Text('Parcel ID: ${parcel.id}'),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Locker: ${parcel.locker}'),
+                  // Text('PIN: ${parcel.pin}'),
+                  Text('Status: ${parcel.status}'),
+                ],
+              ),
+              trailing: parcel.status == 'Ready for Pickup'
+                  ? IconButton(
+                icon: const Icon(Icons.check_circle, color: Colors.green),
+                  // onPressed: () => Navigator.pushNamed(context, '/parcelinfo'),
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ParcelInfoScreen(parcel: parcel),
+                    ),
+                  );
+                },
+              )
+                  : const Icon(Icons.done, color: Colors.grey),
+            ),
+          );
+        },
+      ),
+
+    );
+  }
+}
+
 class AdminLoginScreen extends StatefulWidget {
   const AdminLoginScreen({super.key});
 
@@ -511,14 +703,33 @@ class _AdminLoginScreenState extends State<AdminLoginScreen> {
   final _passwordController = TextEditingController();
   String? _errorText;
 
-  void _login() {
-    if (_usernameController.text == 'admin' &&
-        _passwordController.text == 'admin123') {
-      Navigator.pushReplacementNamed(context, '/admin_dashboard');
+  void _login() async {
+    final enteredUsername = _usernameController.text.trim();
+    final enteredPassword = _passwordController.text.trim();
+    final snapshot = await FirebaseDatabase.instance.ref('Admin').get();
+
+    if (snapshot.exists) {
+      final data = snapshot.value as Map<dynamic, dynamic>;
+      final storedUsername = data['username'];
+      final storedPassword = data['password'];
+
+      if(enteredUsername == storedUsername && enteredPassword == storedPassword) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Login successful')),
+        );
+        Navigator.pushReplacementNamed(context, '/admin_dashboard');
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid username or password!')),
+        );
+      }
     } else {
-      setState(() => _errorText = 'Invalid username or password');
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Admin data not found')),
+      );
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -604,7 +815,7 @@ class NotificationScreen extends StatelessWidget {
             child: SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
-                onPressed: () => Navigator.pop(context),
+                onPressed: () => Navigator.pushNamed(context, '/'),
                 icon: const Icon(Icons.home),
                 label: const Text('Back to Home'),
                 style: ElevatedButton.styleFrom(
@@ -813,7 +1024,7 @@ class AppDrawer extends StatelessWidget {
             title: const Text('Pickup Parcel'),
             onTap: () {
               Navigator.pop(context);
-              Navigator.pushNamed(context, '/parcelinfo');
+              Navigator.pushNamed(context, '/collectparcel');
             },
           ),
           ListTile(
