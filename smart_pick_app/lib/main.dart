@@ -4,6 +4,8 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'package:firebase_database/firebase_database.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 
 // ...
 
@@ -366,7 +368,8 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Correct PIN entered.')),
       );
-      Navigator.pushReplacementNamed(context, '/admin_dashboard');
+      await _sendPinToPi(enteredPIN);
+      Navigator.pushReplacementNamed(context, '/admin_dashboard'); //placeholder for now
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid PIN!')),
@@ -374,11 +377,36 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
     }
   }
 
-  // void _togglePinVisibility() {
-  //   setState(() {
-  //     _isPinVisible = !_isPinVisible;
-  //   });
-  // }
+  Future<void> _sendPinToPi(String pin) async {
+    const String raspberryPiIP = 'http://192.168.1.14:5000'; // <-- Replace with your actual Pi IP
+
+    final url = Uri.parse('$raspberryPiIP/set-pin');
+
+    try {
+      final response = await http.post(
+        url,
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'pin': pin}),
+      );
+
+      if (response.statusCode == 200) {
+        print('PIN sent successfully: $pin');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN sent to Smart Locker')),
+        );
+      } else {
+        print('Failed to send PIN. Status: ${response.statusCode}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Failed to send PIN to Pi')),
+        );
+      }
+    } catch (e) {
+      print('Error sending PIN: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
