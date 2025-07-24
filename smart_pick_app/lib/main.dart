@@ -368,8 +368,9 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Correct PIN entered.')),
       );
-      await _sendPinToPi(enteredPIN);
-      Navigator.pushReplacementNamed(context, '/admin_dashboard'); //placeholder for now
+      await _updateParcelStatus(widget.parcel.id, "Unlocked");
+      await _unlockLocker(widget.parcel.id);
+      // Navigator.pushReplacementNamed(context, '/admin_dashboard'); //placeholder for now
     } else {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Invalid PIN!')),
@@ -377,20 +378,29 @@ class _ParcelInfoScreenState extends State<ParcelInfoScreen> {
     }
   }
 
-  Future<void> _sendPinToPi(String pin) async {
-    const String raspberryPiIP = 'http://192.168.1.14:5000'; // <-- Replace with your actual Pi IP
+  Future<void> _updateParcelStatus(String parcelId, String newStatus) async {
+    final ref = FirebaseDatabase.instance.ref('Deliveries/$parcelId');
+    await ref.update({'status': newStatus});
+  }
 
-    final url = Uri.parse('$raspberryPiIP/set-pin');
+
+  Future<void> _unlockLocker(String parcel_id) async {
+    const String raspberryPiIP = 'http://192.168.1.32:5000'; // <-- Replace with your actual Pi IP
+
+    final url = Uri.parse('$raspberryPiIP/unlock_locker');
 
     try {
       final response = await http.post(
         url,
         headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({'pin': pin}),
+        body: jsonEncode({
+          'parcel_id': parcel_id,
+          // 'pin': pin
+        }),
       );
 
       if (response.statusCode == 200) {
-        print('PIN sent successfully: $pin');
+        print('Locker door has been opened: $parcel_id');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('PIN sent to Smart Locker')),
         );
